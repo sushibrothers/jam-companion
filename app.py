@@ -35,22 +35,29 @@ def build_chord_templates():
         templates[f"{root}7"] = dom7 / np.linalg.norm(dom7)
     return templates
 
+def pearson_correlation(x, y):
+    """Calcula la correlación de Pearson devolviendo un float nativo."""
+    x_diff = x - np.mean(x)
+    y_diff = y - np.mean(y)
+    denom = (np.sqrt(np.sum(x_diff ** 2)) * np.sqrt(np.sum(y_diff ** 2))) + 1e-9
+    return float(np.sum(x_diff * y_diff) / denom)
+
 def detect_key(chroma_mean):
     correlations = {}
     for i, root in enumerate(PITCH_CLASSES):
         maj_prof = np.roll(MAJOR_PROFILE, i)
         min_prof = np.roll(MINOR_PROFILE, i)
-        correlations[f"{root} Mayor"] = np.corrcoef(chroma_mean, maj_prof)
-        correlations[f"{root} menor"] = np.corrcoef(chroma_mean, min_prof)
-    best_key, score = max(correlations.items(), key=lambda x: x)
-    return best_key, score
+        correlations[f"{root} Mayor"] = pearson_correlation(chroma_mean, maj_prof)
+        correlations[f"{root} menor"] = pearson_correlation(chroma_mean, min_prof)
+    best_key, score = max(correlations.items(), key=lambda item: item)
+    return best_key, float(score)
 
 def parse_chord(chord_str):
-    if chord_str == "N" or not chord_str:
+    if not chord_str or chord_str == "N":
         return None, None
-    if len(chord_str) > 1 and chord_str == "#":
+    if len(chord_str) > 1 and chord_str.startswith(tuple(c for c in PITCH_CLASSES if "#" in c)):
         return chord_str[:2], chord_str[2:]
-    return chord_str[0], chord_str[1:]
+    return chord_str[:1], chord_str[1:]
 
 def get_arpeggio_details(chord_str):
     root, quality = parse_chord(chord_str)
@@ -153,7 +160,7 @@ if uploaded_file is not None:
             y_harmonic, _ = librosa.effects.hpss(y)
 
             tempo, beat_frames = librosa.beat.beat_track(y=y_harmonic, sr=sr)
-            tempo_val = float(np.atleast_1d(tempo)[0])
+            tempo_val = float(np.asarray(tempo).flat[0])
 
             chroma = librosa.feature.chroma_cqt(y=y_harmonic, sr=sr)
             chroma_mean = np.mean(chroma, axis=1)
