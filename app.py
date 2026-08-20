@@ -5,18 +5,18 @@ import streamlit as st
 
 st.set_page_config(page_title="Jam Companion Pro", page_icon="🎸", layout="wide")
 
-PITCH_CLASSES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
-GUITAR_TUNING = ['E', 'B', 'G', 'D', 'A', 'E']
+PITCH_CLASSES = tuple(('C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'))
+GUITAR_TUNING = tuple(('E', 'B', 'G', 'D', 'A', 'E'))
 
-MAJOR_PROFILE = np.array([6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88])
-MINOR_PROFILE = np.array([6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17])
+MAJOR_PROFILE = np.array((6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88))
+MINOR_PROFILE = np.array((6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17))
 
 CHORD_DEFINITIONS = {
-    "": ("Mayor",),
-    "m": ("menor",),
-    "7": ("7ma Dominante",),
-    "maj7": ("Mayor 7ma",),
-    "m7": ("menor 7ma",),
+    "": ("Mayor", (0, 4, 7)),
+    "m": ("menor", (0, 3, 7)),
+    "7": ("7ma Dominante", (0, 4, 7, 10)),
+    "maj7": ("Mayor 7ma", (0, 4, 7, 11)),
+    "m7": ("menor 7ma", (0, 3, 7, 10)),
 }
 
 def build_chord_templates():
@@ -55,10 +55,10 @@ def parse_chord(chord_str):
 def get_arpeggio_details(chord_str):
     root, quality = parse_chord(chord_str)
     if not root or root not in PITCH_CLASSES:
-        return None, []
+        return None, tuple()
     root_idx = PITCH_CLASSES.index(root)
     name_qual, intervals = CHORD_DEFINITIONS.get(quality, CHORD_DEFINITIONS[""])
-    notes = [PITCH_CLASSES[(root_idx + interval) % 12] for interval in intervals]
+    notes = tuple(PITCH_CLASSES[(root_idx + interval) % 12] for interval in intervals)
     return root, notes
 
 def generate_fretboard_svg(scale_notes, arpeggio_notes, root_note, num_frets=12):
@@ -83,7 +83,8 @@ def generate_fretboard_svg(scale_notes, arpeggio_notes, root_note, num_frets=12)
         svg.append(f'<line x1="{x}" y1="{margin_t}" x2="{x}" y2="{margin_t + string_height * 5}" stroke="#475569" stroke-width="2"/>')
         svg.append(f'<text x="{x - fret_width / 2}" y="{height - 10}" fill="#64748b" font-size="11px" font-weight="bold" text-anchor="middle">{fret}</text>')
         
-    for fret in:
+    dot_frets = (3, 5, 7, 9)
+    for fret in dot_frets:
         if fret <= num_frets:
             cx = margin_l + (fret - 0.5) * fret_width
             cy = margin_t + 2.5 * string_height
@@ -142,7 +143,7 @@ if uploaded_file is not None:
     st.audio(uploaded_file)
     
     if st.button("🔍 Analizar Canción"):
-        with st.spinner("Analizando armónicos y acordes con librosa..."):
+        with st.spinner("Analizando armónicos y acordes..."):
             temp_path = f"temp_{uploaded_file.name}"
             with open(temp_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
@@ -164,12 +165,16 @@ if uploaded_file is not None:
             root_idx = PITCH_CLASSES.index(key_root)
 
             if is_major:
-                scale_notes = [PITCH_CLASSES[(root_idx + s) % 12] for s in]
-                penta_notes = [PITCH_CLASSES[(root_idx + s) % 12] for s in]
+                scale_steps = (0, 2, 4, 5, 7, 9, 11)
+                penta_steps = (0, 2, 4, 7, 9)
+                scale_notes = [PITCH_CLASSES[(root_idx + s) % 12] for s in scale_steps]
+                penta_notes = [PITCH_CLASSES[(root_idx + s) % 12] for s in penta_steps]
                 rel_key = f"{PITCH_CLASSES[(root_idx + 9) % 12]} menor"
             else:
-                scale_notes = [PITCH_CLASSES[(root_idx + s) % 12] for s in]
-                penta_notes = [PITCH_CLASSES[(root_idx + s) % 12] for s in]
+                scale_steps = (0, 2, 3, 5, 7, 8, 10)
+                penta_steps = (0, 3, 5, 7, 10)
+                scale_notes = [PITCH_CLASSES[(root_idx + s) % 12] for s in scale_steps]
+                penta_notes = [PITCH_CLASSES[(root_idx + s) % 12] for s in penta_steps]
                 rel_key = f"{PITCH_CLASSES[(root_idx + 3) % 12]} Mayor"
 
             beat_chroma = librosa.util.sync(chroma, beat_frames, aggregate=np.median)
@@ -177,7 +182,8 @@ if uploaded_file is not None:
             times = np.concatenate([[0.0], beat_times, [duration]])
 
             templates = build_chord_templates()
-            raw_chords = [match_chord(beat_chroma[:, b], templates) for b in range(beat_chroma.shape)]
+            num_beats = beat_chroma.shape[-1]
+            raw_chords = [match_chord(beat_chroma[:, b], templates) for b in range(num_beats)]
 
             table_data = []
             unique_chords = []
