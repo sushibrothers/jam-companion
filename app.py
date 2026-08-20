@@ -8,9 +8,9 @@ st.set_page_config(page_title="Jam Companion Pro", page_icon="🎸", layout="wid
 PITCH_CLASSES = tuple(('C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'))
 GUITAR_TUNING = tuple(('E', 'B', 'G', 'D', 'A', 'E'))
 
-# Perfiles armónicos de Temperley para Pop, Rock y Folk
-TEMPERLEY_MAJOR = np.array((5.0, 2.0, 3.5, 2.0, 4.5, 4.0, 2.0, 4.5, 2.0, 3.5, 1.5, 4.0))
-TEMPERLEY_MINOR = np.array((5.0, 2.0, 3.5, 4.5, 2.0, 4.0, 2.0, 4.5, 3.5, 2.0, 1.5, 4.0))
+# Perfiles de Sha'ath (KeyFinder) - Diseñados para resistir armónicos secundarios en grabaciones reales
+SHAATH_MAJ = np.array((16.8, 0.86, 12.95, 1.41, 13.49, 11.93, 1.25, 20.28, 1.80, 13.04, 1.77, 4.48))
+SHAATH_MIN = np.array((18.16, 0.69, 12.99, 13.34, 1.07, 11.15, 1.38, 21.07, 7.49, 0.95, 6.92, 4.79))
 
 CHORD_DEFINITIONS = {
     "": ("Mayor", (0, 4, 7)),
@@ -20,41 +20,50 @@ CHORD_DEFINITIONS = {
     "m7": ("menor 7ma", (0, 3, 7, 10)),
 }
 
-def build_chord_templates():
+def build_smart_chord_templates():
     templates = {}
     for i, root in enumerate(PITCH_CLASSES):
-        maj = np.zeros(12)
-        maj[(i + 0) % 12] = 1.3; maj[(i + 4) % 12] = 1.0; maj[(i + 7) % 12] = 1.0
+        # Acorde Mayor: premia notas del acorde (+1.5, +1.0) y penaliza notas extrañas (-0.3)
+        maj = np.full(12, -0.3)
+        maj[(i + 0) % 12] = 1.5
+        maj[(i + 4) % 12] = 1.0
+        maj[(i + 7) % 12] = 1.0
         templates[f"{root}"] = maj / np.linalg.norm(maj)
 
-        minor = np.zeros(12)
-        minor[(i + 0) % 12] = 1.3; minor[(i + 3) % 12] = 1.0; minor[(i + 7) % 12] = 1.0
+        # Acorde Menor
+        minor = np.full(12, -0.3)
+        minor[(i + 0) % 12] = 1.5
+        minor[(i + 3) % 12] = 1.0
+        minor[(i + 7) % 12] = 1.0
         templates[f"{root}m"] = minor / np.linalg.norm(minor)
 
-        dom7 = np.zeros(12)
-        dom7[(i + 0) % 12] = 1.3; dom7[(i + 4) % 12] = 1.0; dom7[(i + 7) % 12] = 1.0; dom7[(i + 10) % 12] = 0.8
+        # Acorde 7ma Dominante
+        dom7 = np.full(12, -0.4)
+        dom7[(i + 0) % 12] = 1.5
+        dom7[(i + 4) % 12] = 1.0
+        dom7[(i + 7) % 12] = 1.0
+        dom7[(i + 10) % 12] = 0.9
         templates[f"{root}7"] = dom7 / np.linalg.norm(dom7)
     return templates
 
-def pearson_correlation(x, y):
-    x_diff = x - np.mean(x)
-    y_diff = y - np.mean(y)
-    denom = (np.sqrt(np.sum(x_diff ** 2)) * np.sqrt(np.sum(y_diff ** 2))) + 1e-9
-    return float(np.sum(x_diff * y_diff) / denom)
+def standardize_vec(v):
+    return (v - np.mean(v)) / (np.std(v) + 1e-9)
 
-def detect_key_robust(chroma_matrix):
+def detect_key_shaath(chroma_matrix):
     chroma_mean = np.mean(chroma_matrix, axis=1)
-    norm = np.linalg.norm(chroma_mean)
-    if norm > 1e-9:
-        chroma_mean = chroma_mean / norm
+    c_std = standardize_vec(chroma_mean)
     
     correlations = {}
     for i, root in enumerate(PITCH_CLASSES):
-        maj_prof = np.roll(TEMPERLEY_MAJOR, i)
-        min_prof = np.roll(TEMPERLEY_MINOR, i)
-        correlations[f"{root} Mayor"] = pearson_correlation(chroma_mean, maj_prof)
-        correlations[f"{root} menor"] = pearson_correlation(chroma_mean, min_prof)
-    
+        maj_prof = standardize_vec(np.roll(SHAATH_MAJ, i))
+        min_prof = standardize_vec(np.roll(SHAATH_MIN, i))
+        
+        score_maj = float(np.dot(c_std, maj_prof) / 12.0)
+        score_min = float(np.dot(c_std, min_prof) / 12.0)
+        
+        correlations[f"{root} Mayor"] = score_maj
+        correlations[f"{root} menor"] = score_min
+        
     best_key, score = max(correlations.items(), key=lambda item: item)
     return best_key, float(score)
 
@@ -166,22 +175,18 @@ def match_chord(chroma_vector, templates, min_energy=0.01):
     if norm < min_energy:
         return "N"
     normalized_vec = chroma_vector / norm
-    best_chord = "N"
-    best_sim = -1.0
-    for chord_name, template_vec in templates.items():
-        sim = np.dot(normalized_vec, template_vec)
-        if sim > best_sim:
-            best_sim = sim
-            best_chord = chord_name
+    scores = {name: np.dot(normalized_vec, t) for name, t in templates.items()}
+    best_chord, best_sim = max(scores.items(), key=lambda x: x)
+    if best_sim < 0.2:
+        return "N"
     return best_chord
 
 st.title("🎸 Jam Companion: Escalas, Acordes y Posiciones Pentatónicas")
-st.write("Sube una canción para analizar su tonalidad, acordes y explorar las 5 posiciones pentatónicas en el mástil.")
+st.write("Sube una canción para analizar su tonalidad real, acordes y explorar las 5 posiciones pentatónicas en el mástil.")
 
 uploaded_file = st.file_uploader("Elige un archivo de audio (MP3 o WAV)", type=["mp3", "wav"])
 
 if uploaded_file is not None:
-    # Resetear análisis previo si se subió un archivo nuevo
     if st.session_state.get('current_file_name') != uploaded_file.name:
         st.session_state['current_file_name'] = uploaded_file.name
         st.session_state['analysis_done'] = False
@@ -189,7 +194,7 @@ if uploaded_file is not None:
     st.audio(uploaded_file)
     
     if st.button("🔍 Analizar Canción"):
-        with st.spinner("Analizando armónicos y progresión de acordes..."):
+        with st.spinner("Analizando armónicos y acordes con algoritmo Sha'ath..."):
             temp_path = f"temp_{uploaded_file.name}"
             with open(temp_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
@@ -200,11 +205,10 @@ if uploaded_file is not None:
             tempo, beat_frames = librosa.beat.beat_track(y=y, sr=sr)
             tempo_val = float(np.asarray(tempo).flat[0])
 
-            # Cromagrama STFT de alta resolución sin pérdida de graves
             chroma = librosa.feature.chroma_stft(y=y, sr=sr, n_fft=4096, hop_length=1024)
 
-            # Tonalidad con perfiles Temperley
-            key_name, key_score = detect_key_robust(chroma)
+            # Tonalidad con perfiles Sha'ath
+            key_name, key_score = detect_key_shaath(chroma)
 
             tokens = key_name.split()
             key_root = tokens[0]
@@ -224,11 +228,11 @@ if uploaded_file is not None:
                 penta_notes = [PITCH_CLASSES[(root_idx + s) % 12] for s in penta_steps]
                 rel_key = f"{PITCH_CLASSES[(root_idx + 3) % 12]} Mayor"
 
+            templates = build_smart_chord_templates()
             beat_chroma = librosa.util.sync(chroma, beat_frames, aggregate=np.median)
             beat_times = librosa.frames_to_time(beat_frames, sr=sr, hop_length=1024)
             times = np.concatenate([[0.0], beat_times, [duration]])
 
-            templates = build_chord_templates()
             num_beats = beat_chroma.shape[-1]
             raw_chords = [match_chord(beat_chroma[:, b], templates) for b in range(num_beats)]
 
