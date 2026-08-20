@@ -47,7 +47,7 @@ def detect_key_shaath(chroma_matrix):
         min_prof = standardize_vec(np.roll(SHAATH_MIN, i))
         correlations[f"{root} Mayor"] = float(np.dot(c_std, maj_prof) / 12.0)
         correlations[f"{root} menor"] = float(np.dot(c_std, min_prof) / 12.0)
-    best_key, score = max(correlations.items(), key=lambda item: item)
+    best_key, score = max(correlations.items(), key=lambda x: x[-1])
     return best_key, float(score)
 
 def parse_chord(chord_str):
@@ -116,7 +116,7 @@ def generate_fretboard_svg(scale_notes, arpeggio_notes, root_note, num_frets=15,
         for fret in range(0, num_frets + 1):
             note = PITCH_CLASSES[(open_idx + fret) % 12]
             cx = margin_l - 18 if fret == 0 else margin_l + (fret - 0.5) * fret_width
-            in_box = (box_range[0] <= fret <= box_range) if box_range else True
+            in_box = (box_range[0] <= fret <= box_range[-1]) if box_range else True
             op = 'opacity="1.0"' if in_box else 'opacity="0.25"'
 
             if root_note and note == root_note:
@@ -134,7 +134,7 @@ def match_chord(chroma_vector, templates, min_energy=0.01):
     if norm < min_energy:
         return "N"
     scores = {name: np.dot(chroma_vector / norm, t) for name, t in templates.items()}
-    best_chord, best_sim = max(scores.items(), key=lambda x: x)
+    best_chord, best_sim = max(scores.items(), key=lambda x: x[-1])
     return best_chord if best_sim >= 0.2 else "N"
 
 st.title("🎸 Jam Companion: Escalas y Acordes")
@@ -148,7 +148,7 @@ if uploaded_file is not None:
     st.audio(uploaded_file)
     
     if st.button("🔍 Analizar Canción"):
-        with st.spinner("Analizando armónicos fundamentales..."):
+        with st.spinner("Analizando armónicos fundamentales y acordes..."):
             temp_path = f"temp_{uploaded_file.name}"
             with open(temp_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
@@ -239,7 +239,7 @@ if st.session_state.get('analysis_done', False):
     if "Caja" in selected_box:
         num = int(selected_box.replace("Caja ", ""))
         box_range = get_pentatonic_box_range(st.session_state['key_root'], st.session_state['is_major'], num)
-        st.caption(f"📍 **{selected_box}:** Trastes **{box_range[0]} al {box_range}**.")
+        st.caption(f"📍 **{selected_box}:** Trastes **{box_range[0]} al {box_range[-1]}**.")
 
     if selected_chord:
         root_sel, arp_sel = get_arpeggio_details(selected_chord)
