@@ -8,7 +8,7 @@ st.set_page_config(page_title="Jam Companion Pro", page_icon="🎸", layout="wid
 PITCH_CLASSES = tuple(('C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'))
 GUITAR_TUNING = tuple(('E', 'B', 'G', 'D', 'A', 'E'))
 
-# Perfiles de Temperley (optimizados para pop, rock y folk como The Beatles)
+# Perfiles armónicos de Temperley para Pop, Rock y Folk
 TEMPERLEY_MAJOR = np.array((5.0, 2.0, 3.5, 2.0, 4.5, 4.0, 2.0, 4.5, 2.0, 3.5, 1.5, 4.0))
 TEMPERLEY_MINOR = np.array((5.0, 2.0, 3.5, 4.5, 2.0, 4.0, 2.0, 4.5, 3.5, 2.0, 1.5, 4.0))
 
@@ -24,15 +24,15 @@ def build_chord_templates():
     templates = {}
     for i, root in enumerate(PITCH_CLASSES):
         maj = np.zeros(12)
-        maj[(i + 0) % 12] = 1.2; maj[(i + 4) % 12] = 1.0; maj[(i + 7) % 12] = 1.0
+        maj[(i + 0) % 12] = 1.3; maj[(i + 4) % 12] = 1.0; maj[(i + 7) % 12] = 1.0
         templates[f"{root}"] = maj / np.linalg.norm(maj)
 
         minor = np.zeros(12)
-        minor[(i + 0) % 12] = 1.2; minor[(i + 3) % 12] = 1.0; minor[(i + 7) % 12] = 1.0
+        minor[(i + 0) % 12] = 1.3; minor[(i + 3) % 12] = 1.0; minor[(i + 7) % 12] = 1.0
         templates[f"{root}m"] = minor / np.linalg.norm(minor)
 
         dom7 = np.zeros(12)
-        dom7[(i + 0) % 12] = 1.2; dom7[(i + 4) % 12] = 1.0; dom7[(i + 7) % 12] = 1.0; dom7[(i + 10) % 12] = 0.8
+        dom7[(i + 0) % 12] = 1.3; dom7[(i + 4) % 12] = 1.0; dom7[(i + 7) % 12] = 1.0; dom7[(i + 10) % 12] = 0.8
         templates[f"{root}7"] = dom7 / np.linalg.norm(dom7)
     return templates
 
@@ -44,7 +44,9 @@ def pearson_correlation(x, y):
 
 def detect_key_robust(chroma_matrix):
     chroma_mean = np.mean(chroma_matrix, axis=1)
-    chroma_mean = chroma_mean / (np.linalg.norm(chroma_mean) + 1e-9)
+    norm = np.linalg.norm(chroma_mean)
+    if norm > 1e-9:
+        chroma_mean = chroma_mean / norm
     
     correlations = {}
     for i, root in enumerate(PITCH_CLASSES):
@@ -174,36 +176,35 @@ def match_chord(chroma_vector, templates, min_energy=0.01):
     return best_chord
 
 st.title("🎸 Jam Companion: Escalas, Acordes y Posiciones Pentatónicas")
-st.write("Sube una canción para analizar su tonalidad real, acordes y explorar las 5 posiciones pentatónicas en el mástil.")
+st.write("Sube una canción para analizar su tonalidad, acordes y explorar las 5 posiciones pentatónicas en el mástil.")
 
 uploaded_file = st.file_uploader("Elige un archivo de audio (MP3 o WAV)", type=["mp3", "wav"])
 
 if uploaded_file is not None:
+    # Resetear análisis previo si se subió un archivo nuevo
+    if st.session_state.get('current_file_name') != uploaded_file.name:
+        st.session_state['current_file_name'] = uploaded_file.name
+        st.session_state['analysis_done'] = False
+
     st.audio(uploaded_file)
     
     if st.button("🔍 Analizar Canción"):
-        with st.spinner("Analizando armónicos, afinación y acordes..."):
+        with st.spinner("Analizando armónicos y progresión de acordes..."):
             temp_path = f"temp_{uploaded_file.name}"
             with open(temp_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
 
             y, sr = librosa.load(temp_path, sr=22050, mono=True)
             duration = float(librosa.get_duration(y=y, sr=sr))
-            y_harmonic, _ = librosa.effects.hpss(y)
 
-            # Estimación de afinación real
-            tuning = librosa.estimate_tuning(y=y_harmonic, sr=sr)
-
-            # Detección de tempo
-            tempo, beat_frames = librosa.beat.beat_track(y=y_harmonic, sr=sr)
+            tempo, beat_frames = librosa.beat.beat_track(y=y, sr=sr)
             tempo_val = float(np.asarray(tempo).flat[0])
 
-            # Cromagrama CENS (suavizado y normalizado) para tonalidad
-            chroma_cens = librosa.feature.chroma_cens(y=y_harmonic, sr=sr, tuning=tuning)
-            chroma_cqt = librosa.feature.chroma_cqt(y=y_harmonic, sr=sr, tuning=tuning)
+            # Cromagrama STFT de alta resolución sin pérdida de graves
+            chroma = librosa.feature.chroma_stft(y=y, sr=sr, n_fft=4096, hop_length=1024)
 
-            # Detección de tonalidad robusta con perfiles Temperley
-            key_name, key_score = detect_key_robust(chroma_cens)
+            # Tonalidad con perfiles Temperley
+            key_name, key_score = detect_key_robust(chroma)
 
             tokens = key_name.split()
             key_root = tokens[0]
@@ -223,8 +224,8 @@ if uploaded_file is not None:
                 penta_notes = [PITCH_CLASSES[(root_idx + s) % 12] for s in penta_steps]
                 rel_key = f"{PITCH_CLASSES[(root_idx + 3) % 12]} Mayor"
 
-            beat_chroma = librosa.util.sync(chroma_cqt, beat_frames, aggregate=np.median)
-            beat_times = librosa.frames_to_time(beat_frames, sr=sr)
+            beat_chroma = librosa.util.sync(chroma, beat_frames, aggregate=np.median)
+            beat_times = librosa.frames_to_time(beat_frames, sr=sr, hop_length=1024)
             times = np.concatenate([[0.0], beat_times, [duration]])
 
             templates = build_chord_templates()
