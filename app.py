@@ -8,8 +8,9 @@ st.set_page_config(page_title="Jam Companion Pro", page_icon="🎸", layout="wid
 PITCH_CLASSES = tuple(('C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'))
 GUITAR_TUNING = tuple(('E', 'B', 'G', 'D', 'A', 'E'))
 
-MAJOR_PROFILE = np.array((6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88))
-MINOR_PROFILE = np.array((6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17))
+# Perfiles de Temperley (optimizados para pop, rock y folk como The Beatles)
+TEMPERLEY_MAJOR = np.array((5.0, 2.0, 3.5, 2.0, 4.5, 4.0, 2.0, 4.5, 2.0, 3.5, 1.5, 4.0))
+TEMPERLEY_MINOR = np.array((5.0, 2.0, 3.5, 4.5, 2.0, 4.0, 2.0, 4.5, 3.5, 2.0, 1.5, 4.0))
 
 CHORD_DEFINITIONS = {
     "": ("Mayor", (0, 4, 7)),
@@ -23,32 +24,35 @@ def build_chord_templates():
     templates = {}
     for i, root in enumerate(PITCH_CLASSES):
         maj = np.zeros(12)
-        maj[(i + 0) % 12] = 1.0; maj[(i + 4) % 12] = 1.0; maj[(i + 7) % 12] = 1.0
+        maj[(i + 0) % 12] = 1.2; maj[(i + 4) % 12] = 1.0; maj[(i + 7) % 12] = 1.0
         templates[f"{root}"] = maj / np.linalg.norm(maj)
 
         minor = np.zeros(12)
-        minor[(i + 0) % 12] = 1.0; minor[(i + 3) % 12] = 1.0; minor[(i + 7) % 12] = 1.0
+        minor[(i + 0) % 12] = 1.2; minor[(i + 3) % 12] = 1.0; minor[(i + 7) % 12] = 1.0
         templates[f"{root}m"] = minor / np.linalg.norm(minor)
 
         dom7 = np.zeros(12)
-        dom7[(i + 0) % 12] = 1.0; dom7[(i + 4) % 12] = 1.0; dom7[(i + 7) % 12] = 1.0; dom7[(i + 10) % 12] = 0.8
+        dom7[(i + 0) % 12] = 1.2; dom7[(i + 4) % 12] = 1.0; dom7[(i + 7) % 12] = 1.0; dom7[(i + 10) % 12] = 0.8
         templates[f"{root}7"] = dom7 / np.linalg.norm(dom7)
     return templates
 
 def pearson_correlation(x, y):
-    """Calcula la correlación de Pearson devolviendo un float nativo."""
     x_diff = x - np.mean(x)
     y_diff = y - np.mean(y)
     denom = (np.sqrt(np.sum(x_diff ** 2)) * np.sqrt(np.sum(y_diff ** 2))) + 1e-9
     return float(np.sum(x_diff * y_diff) / denom)
 
-def detect_key(chroma_mean):
+def detect_key_robust(chroma_matrix):
+    chroma_mean = np.mean(chroma_matrix, axis=1)
+    chroma_mean = chroma_mean / (np.linalg.norm(chroma_mean) + 1e-9)
+    
     correlations = {}
     for i, root in enumerate(PITCH_CLASSES):
-        maj_prof = np.roll(MAJOR_PROFILE, i)
-        min_prof = np.roll(MINOR_PROFILE, i)
+        maj_prof = np.roll(TEMPERLEY_MAJOR, i)
+        min_prof = np.roll(TEMPERLEY_MINOR, i)
         correlations[f"{root} Mayor"] = pearson_correlation(chroma_mean, maj_prof)
         correlations[f"{root} menor"] = pearson_correlation(chroma_mean, min_prof)
+    
     best_key, score = max(correlations.items(), key=lambda item: item)
     return best_key, float(score)
 
@@ -69,10 +73,9 @@ def get_arpeggio_details(chord_str):
     return root, notes
 
 def get_pentatonic_box_range(key_root, is_major, box_number):
-    """Calcula el rango de trastes (inicio, fin) para la caja pentatónica seleccionada."""
     root_idx = PITCH_CLASSES.index(key_root)
     min_root_idx = (root_idx + 9) % 12 if is_major else root_idx
-    base_fret = (min_root_idx - 4) % 12  # 6ta cuerda = E (idx 4)
+    base_fret = (min_root_idx - 4) % 12
 
     offsets = {
         1: (0, 3),
@@ -96,13 +99,11 @@ def generate_fretboard_svg(scale_notes, arpeggio_notes, root_note, num_frets=15,
     
     svg = [f'<svg viewBox="0 0 {width} {height}" width="100%" height="auto" style="background:#0f172a; border-radius: 12px; font-family: system-ui, sans-serif; border: 1px solid #334155;">']
     
-    # Título y Leyenda
     svg.append(f'<text x="{margin_l}" y="22" fill="#e2e8f0" font-size="13px" font-weight="bold">MÁSTIL DE GUITARRA (Trastes 0 a {num_frets})</text>')
     svg.append(f'<circle cx="{width - 290}" cy="18" r="6" fill="#f59e0b"/><text x="{width - 278}" y="22" fill="#94a3b8" font-size="11px">Fundamental</text>')
     svg.append(f'<circle cx="{width - 190}" cy="18" r="6" fill="#10b981"/><text x="{width - 178}" y="22" fill="#94a3b8" font-size="11px">Arpegio</text>')
     svg.append(f'<circle cx="{width - 100}" cy="18" r="5" fill="#334155"/><text x="{width - 90}" y="22" fill="#94a3b8" font-size="11px">Escala</text>')
 
-    # Resaltado visual de la Caja Pentatónica
     if box_range:
         b_start, b_end = box_range
         x_start = margin_l + (b_start - 1) * fret_width if b_start > 0 else margin_l
@@ -110,16 +111,13 @@ def generate_fretboard_svg(scale_notes, arpeggio_notes, root_note, num_frets=15,
         box_w = x_end - x_start
         svg.append(f'<rect x="{x_start}" y="{margin_t - 4}" width="{box_w}" height="{string_height * 5 + 8}" fill="rgba(56, 189, 248, 0.08)" stroke="#38bdf8" stroke-width="2" stroke-dasharray="4" rx="8" />')
 
-    # Cejuela (Nut)
     svg.append(f'<rect x="{margin_l - 6}" y="{margin_t}" width="6" height="{string_height * 5}" fill="#cbd5e1" rx="2" />')
     
-    # Trastes verticales y números
     for fret in range(1, num_frets + 1):
         x = margin_l + fret * fret_width
         svg.append(f'<line x1="{x}" y1="{margin_t}" x2="{x}" y2="{margin_t + string_height * 5}" stroke="#475569" stroke-width="2"/>')
         svg.append(f'<text x="{x - fret_width / 2}" y="{height - 10}" fill="#64748b" font-size="11px" font-weight="bold" text-anchor="middle">{fret}</text>')
         
-    # Puntos guía (3, 5, 7, 9, 12, 15)
     dot_frets = (3, 5, 7, 9, 15)
     for fret in dot_frets:
         if fret <= num_frets:
@@ -131,14 +129,12 @@ def generate_fretboard_svg(scale_notes, arpeggio_notes, root_note, num_frets=15,
         svg.append(f'<circle cx="{cx12}" cy="{margin_t + 1.25 * string_height}" r="4" fill="#334155" opacity="0.7"/>')
         svg.append(f'<circle cx="{cx12}" cy="{margin_t + 3.75 * string_height}" r="4" fill="#334155" opacity="0.7"/>')
         
-    # Cuerdas horizontales
     for s_idx, open_note in enumerate(GUITAR_TUNING):
         y = margin_t + s_idx * string_height
         thickness = 1.0 + (s_idx * 0.45)
         svg.append(f'<line x1="{margin_l}" y1="{y}" x2="{width - margin_r}" y2="{y}" stroke="#94a3b8" stroke-width="{thickness}"/>')
         svg.append(f'<text x="{margin_l - 18}" y="{y + 4}" fill="#f8fafc" font-size="12px" font-weight="bold" text-anchor="middle">{open_note}</text>')
 
-    # Notas sobre el mástil
     for s_idx, open_note in enumerate(GUITAR_TUNING):
         open_idx = PITCH_CLASSES.index(open_note)
         y = margin_t + s_idx * string_height
@@ -177,9 +173,8 @@ def match_chord(chroma_vector, templates, min_energy=0.01):
             best_chord = chord_name
     return best_chord
 
-# Interfaz Principal
 st.title("🎸 Jam Companion: Escalas, Acordes y Posiciones Pentatónicas")
-st.write("Sube una canción para analizar su tonalidad, acordes y explorar las 5 posiciones pentatónicas en el mástil.")
+st.write("Sube una canción para analizar su tonalidad real, acordes y explorar las 5 posiciones pentatónicas en el mástil.")
 
 uploaded_file = st.file_uploader("Elige un archivo de audio (MP3 o WAV)", type=["mp3", "wav"])
 
@@ -187,7 +182,7 @@ if uploaded_file is not None:
     st.audio(uploaded_file)
     
     if st.button("🔍 Analizar Canción"):
-        with st.spinner("Analizando armónicos y acordes..."):
+        with st.spinner("Analizando armónicos, afinación y acordes..."):
             temp_path = f"temp_{uploaded_file.name}"
             with open(temp_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
@@ -196,12 +191,19 @@ if uploaded_file is not None:
             duration = float(librosa.get_duration(y=y, sr=sr))
             y_harmonic, _ = librosa.effects.hpss(y)
 
+            # Estimación de afinación real
+            tuning = librosa.estimate_tuning(y=y_harmonic, sr=sr)
+
+            # Detección de tempo
             tempo, beat_frames = librosa.beat.beat_track(y=y_harmonic, sr=sr)
             tempo_val = float(np.asarray(tempo).flat[0])
 
-            chroma = librosa.feature.chroma_cqt(y=y_harmonic, sr=sr)
-            chroma_mean = np.mean(chroma, axis=1)
-            key_name, key_score = detect_key(chroma_mean)
+            # Cromagrama CENS (suavizado y normalizado) para tonalidad
+            chroma_cens = librosa.feature.chroma_cens(y=y_harmonic, sr=sr, tuning=tuning)
+            chroma_cqt = librosa.feature.chroma_cqt(y=y_harmonic, sr=sr, tuning=tuning)
+
+            # Detección de tonalidad robusta con perfiles Temperley
+            key_name, key_score = detect_key_robust(chroma_cens)
 
             tokens = key_name.split()
             key_root = tokens[0]
@@ -221,7 +223,7 @@ if uploaded_file is not None:
                 penta_notes = [PITCH_CLASSES[(root_idx + s) % 12] for s in penta_steps]
                 rel_key = f"{PITCH_CLASSES[(root_idx + 3) % 12]} Mayor"
 
-            beat_chroma = librosa.util.sync(chroma, beat_frames, aggregate=np.median)
+            beat_chroma = librosa.util.sync(chroma_cqt, beat_frames, aggregate=np.median)
             beat_times = librosa.frames_to_time(beat_frames, sr=sr)
             times = np.concatenate([[0.0], beat_times, [duration]])
 
@@ -295,7 +297,6 @@ if st.session_state.get('analysis_done', False):
         ]
         selected_box = st.selectbox("2. Filtrar por Caja Pentatónica:", box_options)
 
-    # Rango de trastes según la caja elegida
     box_range = None
     if "Caja 1" in selected_box:
         box_range = get_pentatonic_box_range(st.session_state['key_root'], st.session_state['is_major'], 1)
