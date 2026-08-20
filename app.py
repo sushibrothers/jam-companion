@@ -68,8 +68,26 @@ def get_arpeggio_details(chord_str):
     notes = tuple(PITCH_CLASSES[(root_idx + interval) % 12] for interval in intervals)
     return root, notes
 
-def generate_fretboard_svg(scale_notes, arpeggio_notes, root_note, num_frets=12):
-    width, height = 850, 220
+def get_pentatonic_box_range(key_root, is_major, box_number):
+    """Calcula el rango de trastes (inicio, fin) para la caja pentatónica seleccionada."""
+    root_idx = PITCH_CLASSES.index(key_root)
+    min_root_idx = (root_idx + 9) % 12 if is_major else root_idx
+    base_fret = (min_root_idx - 4) % 12  # 6ta cuerda = E (idx 4)
+
+    offsets = {
+        1: (0, 3),
+        2: (2, 5),
+        3: (5, 8),
+        4: (7, 10),
+        5: (9, 12),
+    }
+    start_off, end_off = offsets.get(box_number, (0, 15))
+    start_f = (base_fret + start_off) % 12
+    end_f = start_f + (end_off - start_off)
+    return start_f, end_f
+
+def generate_fretboard_svg(scale_notes, arpeggio_notes, root_note, num_frets=15, box_range=None):
+    width, height = 900, 220
     margin_l, margin_r = 50, 30
     margin_t, margin_b = 35, 30
     
@@ -78,19 +96,31 @@ def generate_fretboard_svg(scale_notes, arpeggio_notes, root_note, num_frets=12)
     
     svg = [f'<svg viewBox="0 0 {width} {height}" width="100%" height="auto" style="background:#0f172a; border-radius: 12px; font-family: system-ui, sans-serif; border: 1px solid #334155;">']
     
+    # Título y Leyenda
     svg.append(f'<text x="{margin_l}" y="22" fill="#e2e8f0" font-size="13px" font-weight="bold">MÁSTIL DE GUITARRA (Trastes 0 a {num_frets})</text>')
     svg.append(f'<circle cx="{width - 290}" cy="18" r="6" fill="#f59e0b"/><text x="{width - 278}" y="22" fill="#94a3b8" font-size="11px">Fundamental</text>')
     svg.append(f'<circle cx="{width - 190}" cy="18" r="6" fill="#10b981"/><text x="{width - 178}" y="22" fill="#94a3b8" font-size="11px">Arpegio</text>')
     svg.append(f'<circle cx="{width - 100}" cy="18" r="5" fill="#334155"/><text x="{width - 90}" y="22" fill="#94a3b8" font-size="11px">Escala</text>')
 
+    # Resaltado visual de la Caja Pentatónica
+    if box_range:
+        b_start, b_end = box_range
+        x_start = margin_l + (b_start - 1) * fret_width if b_start > 0 else margin_l
+        x_end = margin_l + b_end * fret_width
+        box_w = x_end - x_start
+        svg.append(f'<rect x="{x_start}" y="{margin_t - 4}" width="{box_w}" height="{string_height * 5 + 8}" fill="rgba(56, 189, 248, 0.08)" stroke="#38bdf8" stroke-width="2" stroke-dasharray="4" rx="8" />')
+
+    # Cejuela (Nut)
     svg.append(f'<rect x="{margin_l - 6}" y="{margin_t}" width="6" height="{string_height * 5}" fill="#cbd5e1" rx="2" />')
     
+    # Trastes verticales y números
     for fret in range(1, num_frets + 1):
         x = margin_l + fret * fret_width
         svg.append(f'<line x1="{x}" y1="{margin_t}" x2="{x}" y2="{margin_t + string_height * 5}" stroke="#475569" stroke-width="2"/>')
         svg.append(f'<text x="{x - fret_width / 2}" y="{height - 10}" fill="#64748b" font-size="11px" font-weight="bold" text-anchor="middle">{fret}</text>')
         
-    dot_frets = (3, 5, 7, 9)
+    # Puntos guía (3, 5, 7, 9, 12, 15)
+    dot_frets = (3, 5, 7, 9, 15)
     for fret in dot_frets:
         if fret <= num_frets:
             cx = margin_l + (fret - 0.5) * fret_width
@@ -101,27 +131,34 @@ def generate_fretboard_svg(scale_notes, arpeggio_notes, root_note, num_frets=12)
         svg.append(f'<circle cx="{cx12}" cy="{margin_t + 1.25 * string_height}" r="4" fill="#334155" opacity="0.7"/>')
         svg.append(f'<circle cx="{cx12}" cy="{margin_t + 3.75 * string_height}" r="4" fill="#334155" opacity="0.7"/>')
         
+    # Cuerdas horizontales
     for s_idx, open_note in enumerate(GUITAR_TUNING):
         y = margin_t + s_idx * string_height
         thickness = 1.0 + (s_idx * 0.45)
         svg.append(f'<line x1="{margin_l}" y1="{y}" x2="{width - margin_r}" y2="{y}" stroke="#94a3b8" stroke-width="{thickness}"/>')
         svg.append(f'<text x="{margin_l - 18}" y="{y + 4}" fill="#f8fafc" font-size="12px" font-weight="bold" text-anchor="middle">{open_note}</text>')
 
+    # Notas sobre el mástil
     for s_idx, open_note in enumerate(GUITAR_TUNING):
         open_idx = PITCH_CLASSES.index(open_note)
         y = margin_t + s_idx * string_height
         for fret in range(0, num_frets + 1):
             note = PITCH_CLASSES[(open_idx + fret) % 12]
             cx = margin_l - 18 if fret == 0 else margin_l + (fret - 0.5) * fret_width
+            
+            in_box = True
+            if box_range:
+                b_start, b_end = box_range
+                in_box = (b_start <= fret <= b_end)
+
+            opacity_attr = 'opacity="1.0"' if in_box else 'opacity="0.25"'
+
             if root_note and note == root_note:
-                svg.append(f'<circle cx="{cx}" cy="{y}" r="11" fill="#f59e0b" stroke="#ffffff" stroke-width="1.5"/>')
-                svg.append(f'<text x="{cx}" y="{y + 4}" fill="#000000" font-size="10px" font-weight="bold" text-anchor="middle">{note}</text>')
+                svg.append(f'<g {opacity_attr}><circle cx="{cx}" cy="{y}" r="11" fill="#f59e0b" stroke="#ffffff" stroke-width="1.5"/><text x="{cx}" y="{y + 4}" fill="#000000" font-size="10px" font-weight="bold" text-anchor="middle">{note}</text></g>')
             elif arpeggio_notes and note in arpeggio_notes:
-                svg.append(f'<circle cx="{cx}" cy="{y}" r="10" fill="#10b981" stroke="#ffffff" stroke-width="1.2"/>')
-                svg.append(f'<text x="{cx}" y="{y + 4}" fill="#ffffff" font-size="10px" font-weight="bold" text-anchor="middle">{note}</text>')
+                svg.append(f'<g {opacity_attr}><circle cx="{cx}" cy="{y}" r="10" fill="#10b981" stroke="#ffffff" stroke-width="1.2"/><text x="{cx}" y="{y + 4}" fill="#ffffff" font-size="10px" font-weight="bold" text-anchor="middle">{note}</text></g>')
             elif scale_notes and note in scale_notes:
-                svg.append(f'<circle cx="{cx}" cy="{y}" r="8" fill="#1e293b" stroke="#475569" stroke-width="1"/>')
-                svg.append(f'<text x="{cx}" y="{y + 3.5}" fill="#94a3b8" font-size="9px" text-anchor="middle">{note}</text>')
+                svg.append(f'<g {opacity_attr}><circle cx="{cx}" cy="{y}" r="8" fill="#1e293b" stroke="#475569" stroke-width="1"/><text x="{cx}" y="{y + 3.5}" fill="#94a3b8" font-size="9px" text-anchor="middle">{note}</text></g>')
                 
     svg.append('</svg>')
     return "".join(svg)
@@ -141,8 +178,8 @@ def match_chord(chroma_vector, templates, min_energy=0.01):
     return best_chord
 
 # Interfaz Principal
-st.title("🎸 Jam Companion: Escalas, Acordes y Mástil")
-st.write("Sube una canción para analizar su tonalidad, acordes y ver el mapa de digitación en el mástil.")
+st.title("🎸 Jam Companion: Escalas, Acordes y Posiciones Pentatónicas")
+st.write("Sube una canción para analizar su tonalidad, acordes y explorar las 5 posiciones pentatónicas en el mástil.")
 
 uploaded_file = st.file_uploader("Elige un archivo de audio (MP3 o WAV)", type=["mp3", "wav"])
 
@@ -218,6 +255,8 @@ if uploaded_file is not None:
 
             st.session_state['analysis_done'] = True
             st.session_state['key_name'] = key_name
+            st.session_state['key_root'] = key_root
+            st.session_state['is_major'] = is_major
             st.session_state['key_score'] = key_score
             st.session_state['tempo_val'] = tempo_val
             st.session_state['scale_notes'] = scale_notes
@@ -239,13 +278,50 @@ if st.session_state.get('analysis_done', False):
         st.write(f"**Pentatónica:** `{', '.join(st.session_state['penta_notes'])}`")
         st.write(f"**Tonalidad Relativa:** `{st.session_state['rel_key']}`")
 
-    st.subheader("🗺️ Mástil de Guitarra (Fretboard)")
-    selected = st.selectbox("Selecciona un acorde para ver sus notas en el mástil:", st.session_state['unique_chords'])
+    st.divider()
+    st.subheader("🗺️ Mástil de Guitarra y Cajas Pentatónicas")
     
-    if selected:
-        root_sel, arp_sel = get_arpeggio_details(selected)
-        svg_code = generate_fretboard_svg(st.session_state['scale_notes'], arp_sel, root_sel)
-        st.components.v1.html(svg_code, height=230)
+    col_sel1, col_sel2 = st.columns(2)
+    with col_sel1:
+        selected_chord = st.selectbox("1. Elige un acorde de la canción:", st.session_state['unique_chords'])
+    with col_sel2:
+        box_options = [
+            "Todo el Mástil (Completo)",
+            "Caja 1 (Posición Principal)",
+            "Caja 2",
+            "Caja 3",
+            "Caja 4",
+            "Caja 5"
+        ]
+        selected_box = st.selectbox("2. Filtrar por Caja Pentatónica:", box_options)
 
-    st.subheader("📋 Progresión de Acordes")
+    # Rango de trastes según la caja elegida
+    box_range = None
+    if "Caja 1" in selected_box:
+        box_range = get_pentatonic_box_range(st.session_state['key_root'], st.session_state['is_major'], 1)
+    elif "Caja 2" in selected_box:
+        box_range = get_pentatonic_box_range(st.session_state['key_root'], st.session_state['is_major'], 2)
+    elif "Caja 3" in selected_box:
+        box_range = get_pentatonic_box_range(st.session_state['key_root'], st.session_state['is_major'], 3)
+    elif "Caja 4" in selected_box:
+        box_range = get_pentatonic_box_range(st.session_state['key_root'], st.session_state['is_major'], 4)
+    elif "Caja 5" in selected_box:
+        box_range = get_pentatonic_box_range(st.session_state['key_root'], st.session_state['is_major'], 5)
+
+    if box_range:
+        st.caption(f"📍 **{selected_box}:** Enfocada entre los trastes **{box_range[0]} y {box_range}**.")
+
+    if selected_chord:
+        root_sel, arp_sel = get_arpeggio_details(selected_chord)
+        svg_code = generate_fretboard_svg(
+            st.session_state['scale_notes'], 
+            arp_sel, 
+            root_sel, 
+            num_frets=15, 
+            box_range=box_range
+        )
+        st.components.v1.html(svg_code, height=240)
+
+    st.divider()
+    st.subheader("📋 Progresión Completa de Acordes")
     st.table(st.session_state['table_data'])
