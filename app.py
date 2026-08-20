@@ -8,8 +8,8 @@ st.set_page_config(page_title="Jam Companion Pro", page_icon="🎸", layout="wid
 PITCH_CLASSES = tuple(('C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'))
 GUITAR_TUNING = tuple(('E', 'B', 'G', 'D', 'A', 'E'))
 
-SHAATH_MAJ = np.array((16.8, 0.86, 12.95, 1.41, 13.49, 11.93, 1.25, 20.28, 1.80, 13.04, 1.77, 4.48))
-SHAATH_MIN = np.array((18.16, 0.69, 12.99, 13.34, 1.07, 11.15, 1.38, 21.07, 7.49, 0.95, 6.92, 4.79))
+PROFILE_MAJ = np.array((1.0, 0.05, 0.4, 0.05, 0.75, 0.6, 0.05, 0.85, 0.05, 0.55, 0.1, 0.45))
+PROFILE_MIN = np.array((1.0, 0.05, 0.4, 0.75, 0.05, 0.6, 0.05, 0.85, 0.6, 0.05, 0.5, 0.3))
 
 CHORD_DEFINITIONS = {
     "": ("Mayor", (0, 4, 7)),
@@ -22,29 +22,29 @@ CHORD_DEFINITIONS = {
 def build_smart_chord_templates():
     templates = {}
     for i, root in enumerate(PITCH_CLASSES):
-        maj = np.full(12, -0.4)
-        maj[(i + 0) % 12] = 1.8; maj[(i + 4) % 12] = 1.0; maj[(i + 7) % 12] = 1.0
+        maj = np.full(12, -0.3)
+        maj[(i + 0) % 12] = 1.5; maj[(i + 4) % 12] = 1.0; maj[(i + 7) % 12] = 1.0
         templates[f"{root}"] = maj / np.linalg.norm(maj)
 
-        minor = np.full(12, -0.4)
-        minor[(i + 0) % 12] = 1.8; minor[(i + 3) % 12] = 1.0; minor[(i + 7) % 12] = 1.0
+        minor = np.full(12, -0.3)
+        minor[(i + 0) % 12] = 1.5; minor[(i + 3) % 12] = 1.0; minor[(i + 7) % 12] = 1.0
         templates[f"{root}m"] = minor / np.linalg.norm(minor)
 
-        dom7 = np.full(12, -0.5)
-        dom7[(i + 0) % 12] = 1.8; dom7[(i + 4) % 12] = 1.0; dom7[(i + 7) % 12] = 1.0; dom7[(i + 10) % 12] = 0.8
+        dom7 = np.full(12, -0.4)
+        dom7[(i + 0) % 12] = 1.5; dom7[(i + 4) % 12] = 1.0; dom7[(i + 7) % 12] = 1.0; dom7[(i + 10) % 12] = 0.8
         templates[f"{root}7"] = dom7 / np.linalg.norm(dom7)
     return templates
 
 def standardize_vec(v):
     return (v - np.mean(v)) / (np.std(v) + 1e-9)
 
-def detect_key_shaath(chroma_matrix):
+def detect_key_accurate(chroma_matrix):
     chroma_mean = np.mean(chroma_matrix, axis=1)
     c_std = standardize_vec(chroma_mean)
     correlations = {}
     for i, root in enumerate(PITCH_CLASSES):
-        maj_prof = standardize_vec(np.roll(SHAATH_MAJ, i))
-        min_prof = standardize_vec(np.roll(SHAATH_MIN, i))
+        maj_prof = standardize_vec(np.roll(PROFILE_MAJ, i))
+        min_prof = standardize_vec(np.roll(PROFILE_MIN, i))
         correlations[f"{root} Mayor"] = float(np.dot(c_std, maj_prof) / 12.0)
         correlations[f"{root} menor"] = float(np.dot(c_std, min_prof) / 12.0)
     best_key, score = max(correlations.items(), key=lambda x: x[-1])
@@ -76,13 +76,13 @@ def get_pentatonic_box_range(key_root, is_major, box_number):
     return start_f, start_f + (end_off - start_off)
 
 def generate_fretboard_svg(scale_notes, arpeggio_notes, root_note, num_frets=15, box_range=None):
-    width, height = 900, 220
+    width, height = 920, 260
     margin_l, margin_r, margin_t = 50, 30, 35
     fret_width = (width - margin_l - margin_r) / num_frets
-    string_height = (height - margin_t - 30) / 5
+    string_height = (height - margin_t - 40) / 5
     
-    svg = [f'<svg viewBox="0 0 {width} {height}" width="100%" height="auto" style="background:#0f172a; border-radius: 12px; font-family: system-ui, sans-serif; border: 1px solid #334155;">']
-    svg.append(f'<text x="{margin_l}" y="22" fill="#e2e8f0" font-size="13px" font-weight="bold">MÁSTIL (Trastes 0 a {num_frets})</text>')
+    svg = [f'<svg viewBox="0 0 {width} {height}" width="100%" height="auto" style="background:#0f172a; border-radius: 12px; font-family: system-ui, sans-serif; border: 1px solid #334155; display: block;">']
+    svg.append(f'<text x="{margin_l}" y="22" fill="#e2e8f0" font-size="13px" font-weight="bold">MÁSTIL (6 Cuerdas - Trastes 0 a {num_frets})</text>')
     svg.append(f'<circle cx="{width - 290}" cy="18" r="6" fill="#f59e0b"/><text x="{width - 278}" y="22" fill="#94a3b8" font-size="11px">Fundamental</text>')
     svg.append(f'<circle cx="{width - 190}" cy="18" r="6" fill="#10b981"/><text x="{width - 178}" y="22" fill="#94a3b8" font-size="11px">Arpegio</text>')
     svg.append(f'<circle cx="{width - 100}" cy="18" r="5" fill="#334155"/><text x="{width - 90}" y="22" fill="#94a3b8" font-size="11px">Escala</text>')
@@ -97,7 +97,7 @@ def generate_fretboard_svg(scale_notes, arpeggio_notes, root_note, num_frets=15,
     for fret in range(1, num_frets + 1):
         x = margin_l + fret * fret_width
         svg.append(f'<line x1="{x}" y1="{margin_t}" x2="{x}" y2="{margin_t + string_height * 5}" stroke="#475569" stroke-width="2"/>')
-        svg.append(f'<text x="{x - fret_width / 2}" y="{height - 10}" fill="#64748b" font-size="11px" font-weight="bold" text-anchor="middle">{fret}</text>')
+        svg.append(f'<text x="{x - fret_width / 2}" y="{height - 12}" fill="#64748b" font-size="11px" font-weight="bold" text-anchor="middle">{fret}</text>')
         
     for fret in (3, 5, 7, 9, 15):
         if fret <= num_frets:
@@ -135,7 +135,7 @@ def match_chord(chroma_vector, templates, min_energy=0.01):
         return "N"
     scores = {name: np.dot(chroma_vector / norm, t) for name, t in templates.items()}
     best_chord, best_sim = max(scores.items(), key=lambda x: x[-1])
-    return best_chord if best_sim >= 0.2 else "N"
+    return best_chord if best_sim >= 0.15 else "N"
 
 st.title("🎸 Jam Companion: Escalas y Acordes")
 uploaded_file = st.file_uploader("Sube tu archivo de audio (MP3 o WAV)", type=["mp3", "wav"])
@@ -148,7 +148,7 @@ if uploaded_file is not None:
     st.audio(uploaded_file)
     
     if st.button("🔍 Analizar Canción"):
-        with st.spinner("Analizando armónicos fundamentales y acordes..."):
+        with st.spinner("Analizando armónicos y acordes..."):
             temp_path = f"temp_{uploaded_file.name}"
             with open(temp_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
@@ -158,9 +158,8 @@ if uploaded_file is not None:
             tempo, beat_frames = librosa.beat.beat_track(y=y, sr=sr)
             tempo_val = float(np.asarray(tempo).flat[0])
 
-            fmin_hz = float(librosa.note_to_hz('C2'))
-            chroma = librosa.feature.chroma_cqt(y=y, sr=sr, fmin=fmin_hz, n_octaves=4, hop_length=1024)
-            key_name, key_score = detect_key_shaath(chroma)
+            chroma = librosa.feature.chroma_stft(y=y, sr=sr, n_fft=4096, hop_length=1024)
+            key_name, key_score = detect_key_accurate(chroma)
 
             tokens = key_name.split()
             key_root = tokens[0]
@@ -244,7 +243,7 @@ if st.session_state.get('analysis_done', False):
     if selected_chord:
         root_sel, arp_sel = get_arpeggio_details(selected_chord)
         svg = generate_fretboard_svg(st.session_state['scale_notes'], arp_sel, root_sel, num_frets=15, box_range=box_range)
-        st.components.v1.html(svg, height=240)
+        st.components.v1.html(svg, height=320)
 
     st.divider()
     st.subheader("📋 Progresión Completa de Acordes")
