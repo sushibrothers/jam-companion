@@ -7,7 +7,7 @@ st.set_page_config(page_title="Jam Companion Pro", page_icon="🎸", layout="wid
 
 PITCH_CLASSES = tuple(('C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'))
 
-# 6 Cuerdas de la guitarra: (Número, Nota al aire, Índice)
+# 6 Cuerdas de la guitarra (1ª aguda a 6ª grave)
 GUITAR_STRINGS = (
     ("1ª", "E", 4),
     ("2ª", "B", 11),
@@ -92,57 +92,58 @@ def get_pentatonic_box_range(key_root, is_major, box_number):
     return start_f, start_f + (end_off - start_off)
 
 def generate_fretboard_svg(scale_notes, arpeggio_notes, root_note, num_frets=15, box_range=None):
-    width, height = 960, 320
-    margin_l, margin_r, margin_t, margin_b = 75, 25, 45, 45
+    width, height = 1000, 240
+    margin_l, margin_r, margin_t, margin_b = 65, 25, 35, 30
     fret_width = (width - margin_l - margin_r) / num_frets
     string_height = (height - margin_t - margin_b) / 5
     
     svg = [f'<svg viewBox="0 0 {width} {height}" width="100%" height="auto" style="background:#0f172a; border-radius: 12px; font-family: system-ui, -apple-system, sans-serif; border: 2px solid #334155; display: block;">']
-    svg.append(f'<text x="{margin_l}" y="26" fill="#f8fafc" font-size="14px" font-weight="bold">MÁSTIL (6 Cuerdas — Trastes 0 a {num_frets})</text>')
-    svg.append(f'<circle cx="{width - 320}" cy="22" r="7" fill="#f59e0b"/><text x="{width - 308}" y="26" fill="#cbd5e1" font-size="12px" font-weight="bold">Fundamental</text>')
-    svg.append(f'<circle cx="{width - 205}" cy="22" r="7" fill="#10b981"/><text x="{width - 193}" y="26" fill="#cbd5e1" font-size="12px" font-weight="bold">Arpegio</text>')
-    svg.append(f'<circle cx="{width - 110}" cy="22" r="6" fill="#334155"/><text x="{width - 100}" y="26" fill="#94a3b8" font-size="12px">Escala</text>')
+    svg.append(f'<text x="{margin_l}" y="22" fill="#f8fafc" font-size="13px" font-weight="bold">MÁSTIL (6 Cuerdas Completas — Trastes 0 a {num_frets})</text>')
+    svg.append(f'<circle cx="{width - 300}" cy="18" r="6" fill="#f59e0b"/><text x="{width - 288}" y="22" fill="#cbd5e1" font-size="11px" font-weight="bold">Fundamental</text>')
+    svg.append(f'<circle cx="{width - 195}" cy="18" r="6" fill="#10b981"/><text x="{width - 183}" y="22" fill="#cbd5e1" font-size="11px" font-weight="bold">Arpegio</text>')
+    svg.append(f'<circle cx="{width - 105}" cy="18" r="5" fill="#334155"/><text x="{width - 95}" y="22" fill="#94a3b8" font-size="11px">Escala</text>')
 
     if box_range:
         b_start, b_end = box_range
         x_start = margin_l + (b_start - 1) * fret_width if b_start > 0 else margin_l
-        svg.append(f'<rect x="{x_start}" y="{margin_t - 6}" width="{(margin_l + b_end * fret_width) - x_start}" height="{string_height * 5 + 12}" fill="rgba(56, 189, 248, 0.08)" stroke="#38bdf8" stroke-width="2.5" stroke-dasharray="5,5" rx="10" />')
+        x_end = margin_l + b_end * fret_width
+        svg.append(f'<rect x="{x_start}" y="{margin_t - 4}" width="{x_end - x_start}" height="{string_height * 5 + 8}" fill="rgba(56, 189, 248, 0.08)" stroke="#38bdf8" stroke-width="2" stroke-dasharray="4,4" rx="8" />')
 
-    svg.append(f'<rect x="{margin_l - 8}" y="{margin_t - 2}" width="8" height="{string_height * 5 + 4}" fill="#cbd5e1" rx="3" />')
+    svg.append(f'<rect x="{margin_l - 6}" y="{margin_t - 2}" width="6" height="{string_height * 5 + 4}" fill="#cbd5e1" rx="2" />')
     
     for fret in range(1, num_frets + 1):
         x = margin_l + fret * fret_width
         svg.append(f'<line x1="{x}" y1="{margin_t}" x2="{x}" y2="{margin_t + string_height * 5}" stroke="#475569" stroke-width="2"/>')
-        svg.append(f'<text x="{x - fret_width / 2}" y="{height - 15}" fill="#64748b" font-size="12px" font-weight="bold" text-anchor="middle">{fret}</text>')
+        svg.append(f'<text x="{x - fret_width / 2}" y="{height - 10}" fill="#64748b" font-size="11px" font-weight="bold" text-anchor="middle">{fret}</text>')
         
     for fret in (3, 5, 7, 9, 15):
         if fret <= num_frets:
-            svg.append(f'<circle cx="{margin_l + (fret - 0.5) * fret_width}" cy="{margin_t + 2.5 * string_height}" r="6" fill="#334155" opacity="0.8"/>')
+            svg.append(f'<circle cx="{margin_l + (fret - 0.5) * fret_width}" cy="{margin_t + 2.5 * string_height}" r="5" fill="#334155" opacity="0.8"/>')
     if num_frets >= 12:
         cx12 = margin_l + 11.5 * fret_width
-        svg.append(f'<circle cx="{cx12}" cy="{margin_t + 1.25 * string_height}" r="5" fill="#334155" opacity="0.8"/>')
-        svg.append(f'<circle cx="{cx12}" cy="{margin_t + 3.75 * string_height}" r="5" fill="#334155" opacity="0.8"/>')
+        svg.append(f'<circle cx="{cx12}" cy="{margin_t + 1.25 * string_height}" r="4" fill="#334155" opacity="0.8"/>')
+        svg.append(f'<circle cx="{cx12}" cy="{margin_t + 3.75 * string_height}" r="4" fill="#334155" opacity="0.8"/>')
         
     for s_idx, (s_label, open_note, open_idx) in enumerate(GUITAR_STRINGS):
         y = margin_t + s_idx * string_height
-        thickness = 1.0 + (s_idx * 0.55)
+        thickness = 1.0 + (s_idx * 0.45)
         
         svg.append(f'<line x1="{margin_l}" y1="{y}" x2="{width - margin_r}" y2="{y}" stroke="#94a3b8" stroke-width="{thickness}"/>')
-        svg.append(f'<text x="{18}" y="{y + 4}" fill="#64748b" font-size="11px" font-weight="bold">{s_label}</text>')
-        svg.append(f'<text x="{margin_l - 22}" y="{y + 4}" fill="#f8fafc" font-size="13px" font-weight="bold" text-anchor="middle">{open_note}</text>')
+        svg.append(f'<text x="{14}" y="{y + 4}" fill="#64748b" font-size="10px" font-weight="bold">{s_label}</text>')
+        svg.append(f'<text x="{margin_l - 18}" y="{y + 4}" fill="#f8fafc" font-size="12px" font-weight="bold" text-anchor="middle">{open_note}</text>')
 
         for fret in range(0, num_frets + 1):
             note = PITCH_CLASSES[(open_idx + fret) % 12]
-            cx = margin_l - 22 if fret == 0 else margin_l + (fret - 0.5) * fret_width
+            cx = margin_l - 18 if fret == 0 else margin_l + (fret - 0.5) * fret_width
             in_box = (box_range[0] <= fret <= box_range[-1]) if box_range else True
             op = 'opacity="1.0"' if in_box else 'opacity="0.25"'
 
             if root_note and note == root_note:
-                svg.append(f'<g {op}><circle cx="{cx}" cy="{y}" r="12" fill="#f59e0b" stroke="#ffffff" stroke-width="1.8"/><text x="{cx}" y="{y + 4.5}" fill="#000000" font-size="11px" font-weight="bold" text-anchor="middle">{note}</text></g>')
+                svg.append(f'<g {op}><circle cx="{cx}" cy="{y}" r="10.5" fill="#f59e0b" stroke="#ffffff" stroke-width="1.5"/><text x="{cx}" y="{y + 4}" fill="#000000" font-size="10px" font-weight="bold" text-anchor="middle">{note}</text></g>')
             elif arpeggio_notes and note in arpeggio_notes:
-                svg.append(f'<g {op}><circle cx="{cx}" cy="{y}" r="11" fill="#10b981" stroke="#ffffff" stroke-width="1.5"/><text x="{cx}" y="{y + 4.5}" fill="#ffffff" font-size="11px" font-weight="bold" text-anchor="middle">{note}</text></g>')
+                svg.append(f'<g {op}><circle cx="{cx}" cy="{y}" r="9.5" fill="#10b981" stroke="#ffffff" stroke-width="1.2"/><text x="{cx}" y="{y + 4}" fill="#ffffff" font-size="10px" font-weight="bold" text-anchor="middle">{note}</text></g>')
             elif scale_notes and note in scale_notes:
-                svg.append(f'<g {op}><circle cx="{cx}" cy="{y}" r="8.5" fill="#1e293b" stroke="#475569" stroke-width="1.2"/><text x="{cx}" y="{y + 4}" fill="#94a3b8" font-size="10px" text-anchor="middle">{note}</text></g>')
+                svg.append(f'<g {op}><circle cx="{cx}" cy="{y}" r="7.5" fill="#1e293b" stroke="#475569" stroke-width="1"/><text x="{cx}" y="{y + 3.5}" fill="#94a3b8" font-size="9px" text-anchor="middle">{note}</text></g>')
                 
     svg.append('</svg>')
     return "".join(svg)
@@ -261,7 +262,7 @@ if st.session_state.get('analysis_done', False):
     if selected_chord:
         root_sel, arp_sel = get_arpeggio_details(selected_chord)
         svg = generate_fretboard_svg(st.session_state['scale_notes'], arp_sel, root_sel, num_frets=15, box_range=box_range)
-        st.components.v1.html(svg, height=360)
+        st.components.v1.html(svg, height=420)
 
     st.divider()
     st.subheader("📋 Progresión Completa de Acordes")
